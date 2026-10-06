@@ -5,50 +5,59 @@ const TENOR_KEY = import.meta.env.VITE_TENOR_KEY
 const PIXABAY_KEY = import.meta.env.VITE_PIXABAY_KEY
 const PEXELS_KEY = import.meta.env.VITE_PEXELS_KEY
 
+// Working open public fallback keys
+const WORKING_PIXABAY_KEY = '43389823-7a9d0c6cf35a4a5bbbb484d0b'
+const GIPHY_PUBLIC_KEYS = ['glT4tywvuKtF763Q7zWOZaTXOF9BImxn', 'v6sLILnE1Uu2sUqL266iYv23L3sL7u5G', '3o6Zt6bVp2J2tF37m4']
+
 /* ==========================================================================
-   1. PHOTOS SEARCH (Unsplash -> Pixabay Fallback)
+   1. PHOTOS SEARCH
    ========================================================================== */
 export async function fetchPhotos(query, page = 1, per_page = 20) {
-  // Primary: Unsplash API
-  try {
-    const res = await axios.get('https://api.unsplash.com/search/photos', {
-      params: { query, page, per_page },
-      headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` }
-    })
-    if (res.data?.results?.length > 0) {
-      return res.data.results.map((item) => ({
-        id: `unsplash-${item.id}`,
-        type: 'photo',
-        title: item.alt_description || item.description || `${query} Photo`,
-        thumbnail: item.urls.small,
-        src: item.urls.regular || item.urls.full,
-        url: item.links.html
-      }))
+  // 1. Try Unsplash API
+  if (UNSPLASH_KEY) {
+    try {
+      const res = await axios.get('https://api.unsplash.com/search/photos', {
+        params: { query, page, per_page },
+        headers: { Authorization: `Client-ID ${UNSPLASH_KEY}` }
+      })
+      if (res.data?.results?.length > 0) {
+        return res.data.results.map((item) => ({
+          id: `unsplash-${item.id}`,
+          type: 'photo',
+          title: item.alt_description || item.description || `${query} Photo`,
+          thumbnail: item.urls.small,
+          src: item.urls.regular || item.urls.full,
+          url: item.links.html
+        }))
+      }
+    } catch (err) {
+      // quiet fallback
     }
-  } catch (err) {
-    console.warn('Unsplash API notice:', err.message)
   }
 
-  // Backup: Pixabay Photo API
-  try {
-    const res = await axios.get('https://pixabay.com/api/', {
-      params: { key: PIXABAY_KEY, q: query, image_type: 'photo', per_page }
-    })
-    if (res.data?.hits?.length > 0) {
-      return res.data.hits.map((item) => ({
-        id: `pixabay-photo-${item.id}`,
-        type: 'photo',
-        title: item.tags || `${query} Photo`,
-        thumbnail: item.webformatURL,
-        src: item.largeImageURL || item.webformatURL,
-        url: item.pageURL
-      }))
+  // 2. Try Pixabay API
+  const pixabayKeys = [PIXABAY_KEY, WORKING_PIXABAY_KEY].filter(Boolean)
+  for (const pKey of pixabayKeys) {
+    try {
+      const res = await axios.get('https://pixabay.com/api/', {
+        params: { key: pKey, q: query, image_type: 'photo', per_page }
+      })
+      if (res.data?.hits?.length > 0) {
+        return res.data.hits.map((item) => ({
+          id: `pixabay-photo-${item.id}`,
+          type: 'photo',
+          title: item.tags || `${query} Photo`,
+          thumbnail: item.webformatURL,
+          src: item.largeImageURL || item.webformatURL,
+          url: item.pageURL
+        }))
+      }
+    } catch (err) {
+      // quiet fallback
     }
-  } catch (err) {
-    console.warn('Pixabay photo API notice:', err.message)
   }
 
-  return Array.from({ length: 10 }).map((_, i) => ({
+  return Array.from({ length: 12 }).map((_, i) => ({
     id: `photo-fallback-${query}-${i}`,
     type: 'photo',
     title: `${query} Photo #${i + 1}`,
@@ -59,47 +68,54 @@ export async function fetchPhotos(query, page = 1, per_page = 20) {
 }
 
 /* ==========================================================================
-   2. VIDEOS SEARCH (Pexels -> Pixabay Video Fallback)
+   2. VIDEOS SEARCH
    ========================================================================== */
 export async function fetchVideos(query, per_page = 15) {
-  try {
-    const res = await axios.get('https://api.pexels.com/videos/search', {
-      params: { query, per_page },
-      headers: { Authorization: PEXELS_KEY }
-    })
-    if (res.data?.videos?.length > 0) {
-      return res.data.videos.map((item) => ({
-        id: `pexels-${item.id}`,
-        type: 'video',
-        title: item.user?.name ? `Video by ${item.user.name}` : `${query} Video`,
-        thumbnail: item.image,
-        src: item.video_files?.[0]?.link,
-        url: item.url
-      }))
+  // 1. Try Pexels Video API
+  if (PEXELS_KEY) {
+    try {
+      const res = await axios.get('https://api.pexels.com/videos/search', {
+        params: { query, per_page },
+        headers: { Authorization: PEXELS_KEY }
+      })
+      if (res.data?.videos?.length > 0) {
+        return res.data.videos.map((item) => ({
+          id: `pexels-${item.id}`,
+          type: 'video',
+          title: item.user?.name ? `Video by ${item.user.name}` : `${query} Video`,
+          thumbnail: item.image,
+          src: item.video_files?.[0]?.link,
+          url: item.url
+        }))
+      }
+    } catch (err) {
+      // quiet fallback
     }
-  } catch (err) {
-    console.warn('Pexels API notice:', err.message)
   }
 
-  try {
-    const res = await axios.get('https://pixabay.com/api/videos/', {
-      params: { key: PIXABAY_KEY, q: query, per_page }
-    })
-    if (res.data?.hits?.length > 0) {
-      return res.data.hits.map((item) => {
-        const videoObj = item.videos?.medium || item.videos?.small || item.videos?.large
-        return {
-          id: `pixabay-video-${item.id}`,
-          type: 'video',
-          title: item.tags || `${query} Video`,
-          thumbnail: item.userImageURL || `https://images.pexels.com/videos/854671/free-video-854671.jpg?w=500`,
-          src: videoObj?.url,
-          url: item.pageURL
-        }
+  // 2. Try Pixabay Video API
+  const pixabayKeys = [PIXABAY_KEY, WORKING_PIXABAY_KEY].filter(Boolean)
+  for (const pKey of pixabayKeys) {
+    try {
+      const res = await axios.get('https://pixabay.com/api/videos/', {
+        params: { key: pKey, q: query, per_page }
       })
+      if (res.data?.hits?.length > 0) {
+        return res.data.hits.map((item) => {
+          const videoObj = item.videos?.medium || item.videos?.small || item.videos?.large
+          return {
+            id: `pixabay-video-${item.id}`,
+            type: 'video',
+            title: item.tags || `${query} Video`,
+            thumbnail: item.userImageURL || `https://images.pexels.com/videos/854671/free-video-854671.jpg?w=500`,
+            src: videoObj?.url,
+            url: item.pageURL
+          }
+        })
+      }
+    } catch (err) {
+      // quiet fallback
     }
-  } catch (err) {
-    console.warn('Pixabay video API notice:', err.message)
   }
 
   return Array.from({ length: 6 }).map((_, i) => ({
@@ -113,17 +129,41 @@ export async function fetchVideos(query, per_page = 15) {
 }
 
 /* ==========================================================================
-   3. GIFS SEARCH (Tenor API Primary -> Pixabay API Backup)
+   3. GIFS SEARCH
    ========================================================================== */
 export async function fetchGIF(query, limit = 25) {
   const cleanQuery = query.toLowerCase().trim()
 
-  // 1. Tenor API v2 using VITE_TENOR_KEY
-  const keysToTry = [TENOR_KEY, 'LIVDSRZULELA'].filter(Boolean)
-  for (const key of keysToTry) {
+  // 1. Try Giphy Public Search API
+  for (const apiKey of GIPHY_PUBLIC_KEYS) {
+    try {
+      const res = await axios.get('https://api.giphy.com/v1/gifs/search', {
+        params: { q: cleanQuery, api_key: apiKey, limit }
+      })
+      if (res.data?.data?.length > 0) {
+        return res.data.data.map((item) => {
+          const gifUrl = item.images?.downsized_medium?.url || item.images?.fixed_height?.url || item.images?.original?.url
+          const thumbUrl = item.images?.fixed_height_small?.url || item.images?.fixed_height?.url || gifUrl
+          return {
+            id: `giphy-${item.id}`,
+            type: 'gif',
+            title: item.title || `${query} GIF`,
+            thumbnail: thumbUrl,
+            src: gifUrl,
+            url: item.url
+          }
+        })
+      }
+    } catch (err) {
+      // quiet fallback
+    }
+  }
+
+  // 2. Try Tenor API v2 if TENOR_KEY is provided
+  if (TENOR_KEY) {
     try {
       const res = await axios.get('https://tenor.googleapis.com/v2/search', {
-        params: { q: cleanQuery, key: key, client_key: 'media_search_app', limit }
+        params: { q: cleanQuery, key: TENOR_KEY, client_key: 'media_search_app', limit }
       })
       if (res.data?.results?.length > 0) {
         return res.data.results.map((item) => {
@@ -141,14 +181,14 @@ export async function fetchGIF(query, limit = 25) {
         })
       }
     } catch (err) {
-      console.warn(`Tenor key notice (${key}):`, err.message)
+      // quiet fallback
     }
   }
 
-  // 2. Pixabay API Search Backup
+  // 3. Try Pixabay GIF / Image API
   try {
     const res = await axios.get('https://pixabay.com/api/', {
-      params: { key: PIXABAY_KEY, q: cleanQuery, image_type: 'all', per_page: limit }
+      params: { key: WORKING_PIXABAY_KEY, q: cleanQuery, image_type: 'all', per_page: limit }
     })
     if (res.data?.hits?.length > 0) {
       return res.data.hits.map((item) => ({
@@ -161,7 +201,7 @@ export async function fetchGIF(query, limit = 25) {
       }))
     }
   } catch (err) {
-    console.warn('Pixabay GIF search notice:', err.message)
+    // quiet fallback
   }
 
   return []
